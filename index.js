@@ -46,39 +46,45 @@ async function run() {
         // Get the database and collection on which to run the operation
         const database = client.db("airofficeDB");
         const bookings = database.collection("bookings");
-        
+
 
         /* =========================
             CREATE BOOKING
         ========================= */
 
+
         app.post("/api/bookings", async (req, res) => {
             try {
-                
+
+
                 const booking = {
-                    agency: req.body.agency, // name, contactPerson, phone, address
+                    agency: req.body.agency,
 
                     flight: {
-                        segments: req.body.flight.segments, // array of routes
-                        passengers: req.body.flight.passengers
+                        segments: req.body.flight.segments,
+                        passengers: Number(req.body.flight.passengers),
+                        capacity: Number(req.body.flight.capacity) // ✅ ADDED
                     },
 
-                    fare: req.body.fare, // perPassenger, totalFare
+                    fare: req.body.fare,
 
                     payment: {
                         paidAmount: req.body.payment?.paidAmount || 0,
                         dueAmount: req.body.payment?.dueAmount || req.body.fare.totalFare,
-                        status: req.body.payment?.status || "pending",
+                        status:"pending",
                         history: []
                     },
 
+
+
                     createdAt: new Date()
                 };
-
+                console.log(booking);
                 const result = await bookings.insertOne(booking);
                 res.send(result);
 
             } catch (error) {
+                console.error(error);
                 res.status(500).send({ error: "Failed to create booking" });
             }
         });
@@ -88,7 +94,7 @@ async function run() {
         ========================= */
 
         app.get("/api/bookings", async (req, res) => {
-           
+
             const result = await bookings.find().toArray();
             res.send(result);
         });
@@ -99,7 +105,7 @@ async function run() {
 
         app.get("/api/bookings/by-date", async (req, res) => {
             const { date } = req.query;
-           
+
 
             const result = await bookings.find({
                 "flight.segments.0.date": date
@@ -114,7 +120,7 @@ async function run() {
 
         app.get("/api/bookings/search", async (req, res) => {
             const { date, agency } = req.query;
-            
+
 
             const query = {
                 "flight.segments.0.date": date,
@@ -133,21 +139,27 @@ async function run() {
             const { id } = req.params;
             const { amount, note } = req.body;
 
-            const db = await connectDB();
+            const payAmount = Number(amount);
+            if (payAmount <= 0) {
+                return res.status(400).send({ error: "Invalid payment amount" });
+            }
 
-            await db.collection("bookings").updateOne(
+            await bookings.updateOne(
                 { _id: new ObjectId(id) },
                 {
+                    $set: {
+                        "payment.status": payAmount >=  (await bookings.findOne({ _id: new ObjectId(id) })).payment.dueAmount ? "paid" : "pending"
+                    },
                     $push: {
                         "payment.history": {
                             date: new Date(),
-                            amount,
+                            amount: payAmount,
                             note
                         }
                     },
                     $inc: {
-                        "payment.paidAmount": amount,
-                        "payment.dueAmount": -amount
+                        "payment.paidAmount": payAmount,
+                        "payment.dueAmount": -payAmount
                     }
                 }
             );
@@ -155,7 +167,6 @@ async function run() {
             res.send({ success: true });
         });
 
-      
 
     }
     finally {
@@ -175,3 +186,9 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+
+
+
+
+
