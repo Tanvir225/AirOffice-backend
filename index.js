@@ -46,7 +46,8 @@ async function run() {
         // Get the database and collection on which to run the operation
         const database = client.db("airofficeDB");
         const bookings = database.collection("bookings");
-        
+        const topups = database.collection("topups");
+
 
         /* =========================
             CREATE BOOKING
@@ -54,13 +55,15 @@ async function run() {
 
         app.post("/api/bookings", async (req, res) => {
             try {
-                
+
                 const booking = {
                     agency: req.body.agency, // name, contactPerson, phone, address
 
                     flight: {
                         segments: req.body.flight.segments, // array of routes
-                        passengers: req.body.flight.passengers
+                        passengers: req.body.flight.passengers,
+                        capacity: req.body.flight.capacity,
+                        pnr: req.body.flight.PNR,
                     },
 
                     fare: req.body.fare, // perPassenger, totalFare
@@ -74,9 +77,10 @@ async function run() {
 
                     createdAt: new Date()
                 };
+                console.log(booking);
 
-                const result = await bookings.insertOne(booking);
-                res.send(result);
+                // const result = await bookings.insertOne(booking);
+                // res.send(result);
 
             } catch (error) {
                 res.status(500).send({ error: "Failed to create booking" });
@@ -88,7 +92,7 @@ async function run() {
         ========================= */
 
         app.get("/api/bookings", async (req, res) => {
-           
+
             const result = await bookings.find().sort({ createdAt: -1 }).toArray();
             res.send(result);
         });
@@ -99,7 +103,7 @@ async function run() {
 
         app.get("/api/bookings/by-date", async (req, res) => {
             const { date } = req.query;
-           
+
 
             const result = await bookings.find({
                 "flight.segments.0.date": date
@@ -114,7 +118,7 @@ async function run() {
 
         app.get("/api/bookings/search", async (req, res) => {
             const { date, agency } = req.query;
-            
+
 
             const query = {
                 "flight.segments.0.date": date,
@@ -133,9 +137,9 @@ async function run() {
             const { id } = req.params;
             const { amount, note } = req.body;
 
-            const db = await connectDB();
+            
 
-            await db.collection("bookings").updateOne(
+            await bookings.updateOne(
                 { _id: new ObjectId(id) },
                 {
                     $push: {
@@ -155,7 +159,70 @@ async function run() {
             res.send({ success: true });
         });
 
-      
+
+        /* =========================
+   CREATE TOPUP (CREDIT / DEBIT)
+========================= */
+        app.post("/api/topups", async (req, res) => {
+            try {
+
+
+                const {
+                    type,
+                    date,
+                    time,
+                    amount,
+                    pnr,
+                    description
+                } = req.body;
+
+                if (!type || !date || !time || !amount) {
+                    return res.status(400).send({ message: "Required fields missing" });
+                }
+
+                if (type === "debit" && !pnr) {
+                    return res.status(400).send({ message: "PNR required for debit" });
+                }
+
+                const doc = {
+                    type,
+                    date,
+                    time,
+                    amount: Number(amount),
+                    pnr: type === "debit" ? pnr : null,
+                    description,
+                    createdAt: new Date()
+                };
+
+                const result = await topups.insertOne(doc);
+                res.send({ success: true, insertedId: result.insertedId });
+
+            } catch (err) {
+                res.status(500).send({ error: err.message });
+            }
+        });
+
+        /* =========================
+           GET TOPUP LEDGER
+        ========================= */
+        app.get("/api/topups", async (req, res) => {
+            try {
+
+
+                const topup = await topups
+                    .find()
+                    .sort({createdAt: -1})
+                    .toArray();
+
+                res.send(topup);
+
+            } catch (err) {
+                res.status(500).send({ error: err.message });
+            }
+        });
+
+
+
 
     }
     finally {
