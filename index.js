@@ -79,8 +79,8 @@ async function run() {
                 };
                 console.log(booking);
 
-                // const result = await bookings.insertOne(booking);
-                // res.send(result);
+                const result = await bookings.insertOne(booking);
+                res.send(result);
 
             } catch (error) {
                 res.status(500).send({ error: "Failed to create booking" });
