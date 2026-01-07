@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
 require("dotenv").config();
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 
@@ -10,11 +12,39 @@ const app = express();
    MIDDLEWARE
 ========================= */
 
-app.use(cors({
-    origin: ["http://localhost:5173"],
-    credentials: true,
-}));
+app.use(cors(
+    {
+        origin: [
+            "http://localhost:5173",
+
+
+        ],
+        credentials: true,
+    }
+));
 app.use(express.json());
+app.use(cookieParser());
+
+//custom middleware to verify jwt token
+const verifyToken = async (req, res, next) => {
+    //token from cookie
+    const token = req?.cookies?.token;
+    // console.log(token);
+    if (!token) {
+        return res.status(401).send({ message: 'Unauthorized access' });
+    }
+
+    //verify token
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).send({ message: 'Forbidden access' });
+        }
+        req.decoded = decoded;
+        next();
+    });
+};
+
+
 
 app.get("/", (req, res) => {
     res.send("Welcome to the Airoffice System");
@@ -47,7 +77,29 @@ async function run() {
         const database = client.db("airofficeDB");
         const bookings = database.collection("bookings");
         const topups = database.collection("topups");
+        const users = database.collection("users");
 
+
+        //jwt token api ------------------------------
+        app.post('/api/v1/jwt', (req, res) => {
+            const user = req.body;
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+
+
+            res.cookie("token", token, {
+                httpOnly: true,
+                secure: true,
+                sameSite: "none",
+                path: "/",
+            });
+
+            res.setHeader("Access-Control-Allow-Credentials", "true");
+            res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+            res.send({ status: true });
+        });
+
+
+        //end jwt token api ------------------------------
 
         /* =========================
             CREATE BOOKING
@@ -137,7 +189,7 @@ async function run() {
             const { id } = req.params;
             const { amount, note } = req.body;
 
-            
+
 
             await bookings.updateOne(
                 { _id: new ObjectId(id) },
@@ -211,7 +263,7 @@ async function run() {
 
                 const topup = await topups
                     .find()
-                    .sort({createdAt: -1})
+                    .sort({ createdAt: -1 })
                     .toArray();
 
                 res.send(topup);
@@ -220,6 +272,65 @@ async function run() {
                 res.status(500).send({ error: err.message });
             }
         });
+
+
+
+        // users api --------------------------------
+
+        //user get by email api
+        // app.get('/api/v1/users', verifyToken, verifyAdmin, async (req, res) => {
+
+        //     const cursor = users.find({});
+        //     const result = await cursor.toArray();
+        //     res.send(result);
+        // });
+
+
+        //single user get api
+        app.get('/api/v1/users/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { email: email };
+            const result = await users.findOne(query);
+            res.send(result);
+        });
+
+
+        //user post api
+        app.post('/api/v1/users', async (req, res) => {
+            const user = req.body;
+            const { email } = user;
+
+            const existingUser = await users.findOne({ email: email });
+            if (existingUser) {
+                res.send({ message: "This user already exists" });
+            } else {
+                const result = await users.insertOne(user);
+                res.send(result);
+            }
+        });
+
+        //single user delete api
+        // app.delete('/api/v1/users/:email', verifyToken, verifyAdmin, async (req, res) => {
+        //     const email = req.params.email;
+        //     const query = { email: email };
+        //     const result = await users.deleteOne(query);
+        //     res.send(result);
+        // });
+
+
+
+        //logout api
+        app.post('/api/v1/logout', (req, res) => {
+            res.clearCookie("token", {
+                httpOnly: true,
+                secure: true,
+                sameSite: "none",
+                path: "/",
+            });
+
+            res.send({ message: 'Logged out successfully' });
+        });
+        //end users api --------------------------------
 
 
 
