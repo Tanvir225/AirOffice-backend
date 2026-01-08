@@ -81,7 +81,7 @@ async function run() {
 
 
         //jwt token api ------------------------------
-        app.post('/api/v1/jwt', (req, res) => {
+        app.post('/api/jwt',  (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
 
@@ -105,7 +105,7 @@ async function run() {
             CREATE BOOKING
         ========================= */
 
-        app.post("/api/bookings", async (req, res) => {
+        app.post("/api/bookings", verifyToken, async (req, res) => {
             try {
 
                 const booking = {
@@ -143,7 +143,7 @@ async function run() {
            GET ALL BOOKINGS
         ========================= */
 
-        app.get("/api/bookings", async (req, res) => {
+        app.get("/api/bookings", verifyToken, async (req, res) => {
 
             const result = await bookings.find().sort({ createdAt: -1 }).toArray();
             res.send(result);
@@ -153,7 +153,7 @@ async function run() {
            SEARCH BY DEPARTURE DATE
         ========================= */
 
-        app.get("/api/bookings/by-date", async (req, res) => {
+        app.get("/api/bookings/by-date", verifyToken, async (req, res) => {
             const { date } = req.query;
 
 
@@ -168,7 +168,7 @@ async function run() {
            SEARCH BY DATE + AGENCY
         ========================= */
 
-        app.get("/api/bookings/search", async (req, res) => {
+        app.get("/api/bookings/search", verifyToken, async (req, res) => {
             const { date, agency } = req.query;
 
 
@@ -185,7 +185,7 @@ async function run() {
            ADD PAYMENT TO BOOKING
         ========================= */
 
-        app.patch("/api/bookings/:id/payment", async (req, res) => {
+        app.patch("/api/bookings/:id/payment", verifyToken, async (req, res) => {
             const { id } = req.params;
             const { amount, note } = req.body;
 
@@ -215,7 +215,7 @@ async function run() {
         /* =========================
    CREATE TOPUP (CREDIT / DEBIT)
 ========================= */
-        app.post("/api/topups", async (req, res) => {
+        app.post("/api/topups", verifyToken, async (req, res) => {
             try {
 
 
@@ -257,7 +257,7 @@ async function run() {
         /* =========================
            GET TOPUP LEDGER
         ========================= */
-        app.get("/api/topups", async (req, res) => {
+        app.get("/api/topups", verifyToken ,async (req, res) => {
             try {
 
 
