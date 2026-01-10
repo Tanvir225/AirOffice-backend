@@ -287,7 +287,7 @@ async function run() {
 
 
         //single user get api
-        app.get('/api/v1/users/:email', verifyToken, async (req, res) => {
+        app.get('/api/users/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const query = { email: email };
             const result = await users.findOne(query);
@@ -296,7 +296,7 @@ async function run() {
 
 
         //user post api
-        app.post('/api/v1/users', async (req, res) => {
+        app.post('/api/users', async (req, res) => {
             const user = req.body;
             const { email } = user;
 
@@ -320,7 +320,7 @@ async function run() {
 
 
         //logout api
-        app.post('/api/v1/logout', (req, res) => {
+        app.post('/api/logout', (req, res) => {
             res.clearCookie("token", {
                 httpOnly: true,
                 secure: true,
