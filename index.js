@@ -81,7 +81,7 @@ async function run() {
 
 
         //jwt token api ------------------------------
-        app.post('/api/jwt',  (req, res) => {
+        app.post('/api/jwt', (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '365d' });
 
@@ -115,7 +115,6 @@ async function run() {
                         segments: req.body.flight.segments, // array of routes
                         passengers: req.body.flight.passengers,
                         capacity: req.body.flight.capacity,
-                        pnr: req.body.flight.PNR,
                     },
 
                     fare: req.body.fare, // perPassenger, totalFare
@@ -162,6 +161,62 @@ async function run() {
             }).sort({ createdAt: -1 }).toArray();
 
             res.send(result);
+        });
+
+
+        // single booking patch api
+        /* =========================
+            UPDATE BOOKING (EDIT)
+        ========================= */
+        /* =========================
+     UPDATE BOOKING (EDIT)
+  ========================= */
+        app.patch("/api/bookings/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                // get existing booking
+                const existingBooking = await bookings.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!existingBooking) {
+                    return res.status(404).send({ message: "Booking not found" });
+                }
+
+                const oldPaidAmount = Number(existingBooking.payment?.paidAmount || 0);
+                const newTotalFare = Number(req.body.fare?.totalFare || 0);
+
+                // recalculate due
+                const newDueAmount = newTotalFare - oldPaidAmount;
+
+                const updateDoc = {
+                    $set: {
+                        agency: req.body.agency,
+                        flight: req.body.flight,
+                        fare: req.body.fare,
+
+                        "payment.dueAmount": newDueAmount < 0 ? 0 : newDueAmount,
+
+                        updatedAt: new Date()
+                    }
+                };
+
+                const result = await bookings.updateOne(
+                    { _id: new ObjectId(id) },
+                    updateDoc
+                );
+
+                res.send({
+                    success: true,
+                    modifiedCount: result.modifiedCount,
+                    recalculatedDue: newDueAmount
+                });
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ error: "Failed to update booking" });
+            }
         });
 
         /* =========================
@@ -212,6 +267,25 @@ async function run() {
         });
 
 
+        /*=========================
+            DELETE BOOKING
+        ========================= */
+        app.delete("/api/bookings/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                const result = await bookings.deleteOne({
+                    _id: new ObjectId(id)
+                });
+
+                res.send({ success: true, deletedCount: result.deletedCount });
+            } catch (err) {
+                res.status(500).send({ error: "Failed to delete booking" });
+            }
+        });
+
+
+
         /* =========================
    CREATE TOPUP (CREDIT / DEBIT)
 ========================= */
@@ -257,7 +331,7 @@ async function run() {
         /* =========================
            GET TOPUP LEDGER
         ========================= */
-        app.get("/api/topups", verifyToken ,async (req, res) => {
+        app.get("/api/topups", verifyToken, async (req, res) => {
             try {
 
 
