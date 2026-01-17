@@ -78,10 +78,11 @@ async function run() {
         const bookings = database.collection("bookings");
         const topups = database.collection("topups");
         const users = database.collection("users");
+        const hajjReservation = database.collection("hajj-reservation");
 
 
         //jwt token api ------------------------------
-        app.post('/api/jwt',  (req, res) => {
+        app.post('/api/jwt', (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '365d' });
 
@@ -115,7 +116,7 @@ async function run() {
                         segments: req.body.flight.segments, // array of routes
                         passengers: req.body.flight.passengers,
                         capacity: req.body.flight.capacity,
-                        pnr: req.body.flight.PNR,
+                        // infants: req.body.flight.infants,
                     },
 
                     fare: req.body.fare, // perPassenger, totalFare
@@ -162,6 +163,64 @@ async function run() {
             }).sort({ createdAt: -1 }).toArray();
 
             res.send(result);
+        });
+
+
+        // single booking patch api
+        /* =========================
+            UPDATE BOOKING (EDIT)
+        ========================= */
+        /* =========================
+     UPDATE BOOKING (EDIT)
+  ========================= */
+        app.patch("/api/bookings/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                // get existing booking
+                const existingBooking = await bookings.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!existingBooking) {
+                    return res.status(404).send({ message: "Booking not found" });
+                }
+
+                const oldPaidAmount = Number(existingBooking.payment?.paidAmount || 0);
+                const newTotalFare = Number(req.body.fare?.totalFare || 0);
+
+                // recalculate due
+                const newDueAmount = newTotalFare - oldPaidAmount;
+
+                const updateDoc = {
+                    $set: {
+                        agency: req.body.agency,
+                        flight: req.body.flight,
+                        fare: req.body.fare,
+                        // infants: req.body.infants,
+
+                        "payment.dueAmount": newDueAmount < 0 ? 0 : newDueAmount,
+
+                        updatedAt: new Date()
+                    }
+                };
+
+                console.log(updateDoc);
+                const result = await bookings.updateOne(
+                    { _id: new ObjectId(id) },
+                    updateDoc
+                );
+
+                res.send({
+                    success: true,
+                    modifiedCount: result.modifiedCount,
+                    recalculatedDue: newDueAmount
+                });
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ error: "Failed to update booking" });
+            }
         });
 
         /* =========================
@@ -212,6 +271,25 @@ async function run() {
         });
 
 
+        /*=========================
+            DELETE BOOKING
+        ========================= */
+        app.delete("/api/bookings/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                const result = await bookings.deleteOne({
+                    _id: new ObjectId(id)
+                });
+
+                res.send({ success: true, deletedCount: result.deletedCount });
+            } catch (err) {
+                res.status(500).send({ error: "Failed to delete booking" });
+            }
+        });
+
+
+
         /* =========================
    CREATE TOPUP (CREDIT / DEBIT)
 ========================= */
@@ -257,7 +335,7 @@ async function run() {
         /* =========================
            GET TOPUP LEDGER
         ========================= */
-        app.get("/api/topups", verifyToken ,async (req, res) => {
+        app.get("/api/topups", verifyToken, async (req, res) => {
             try {
 
 
@@ -331,6 +409,142 @@ async function run() {
             res.send({ message: 'Logged out successfully' });
         });
         //end users api --------------------------------
+
+
+        // hajj reservation collection post api
+        app.post("/api/hajj/reservations", verifyToken, async (req, res) => {
+            try {
+                const doc = {
+                    agency: req.body.agency,
+                    flight: req.body.flight,
+                    fare: req.body.fare,
+                    createdAt: new Date()
+                };
+
+                console.log(doc);
+                const result = await hajjReservation.insertOne(doc);
+                res.send(result);
+            } catch {
+                res.status(500).send({ error: "Failed to create reservation" });
+            }
+        });
+
+        // get all reservations api
+        app.get("/api/hajj/reservations", verifyToken, async (req, res) => {
+            const result = await hajjReservation
+                .find()
+                .sort({ createdAt: -1 })
+                .toArray();
+            res.send(result);
+        });
+
+        // patch reservation api
+        app.patch("/api/hajj/reservations/:id", verifyToken, async (req, res) => {
+            const { id } = req.params;
+
+            await hajjReservation.updateOne(
+                { _id: new ObjectId(id) },
+                {
+                    $set: {
+                        agency: req.body.agency,
+                        flight: req.body.flight,
+                        fare: req.body.fare,
+                        updatedAt: new Date()
+                    }
+                }
+            );
+
+            res.send({ success: true });
+        });
+
+        // delete reservation api
+        app.delete("/api/hajj/reservations/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                const result = await hajjReservation.deleteOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).send({ error: "Reservation not found" });
+                }
+
+                res.send({ success: true });
+            } catch (error) {
+                res.status(500).send({ error: "Failed to delete reservation" });
+            }
+        });
+
+
+        // payorder tracking api
+        app.get("/api/hajj/search", verifyToken, async (req, res) => {
+            const { hl, trackingNo, payorderNo } = req.query;
+
+            const query = {
+                $or: [
+                    { "agency.hl": hl },
+                    { "agency.trackingNo": trackingNo },
+                    { "agency.payorderNo": payorderNo }
+                ]
+            };
+
+            const result = await hajjReservation.find(query).toArray();
+            res.send(result);
+        });
+
+
+        // hajj api stats
+        app.get("/api/hajj/stats", verifyToken, async (req, res) => {
+            const reservations = await hajjReservation.find().toArray();
+
+            let pilgrims = 0;
+            let totalFare = 0;
+            let totalReservations = reservations.length;
+
+            const agencyMap = {};
+            const fareVsPilgrim = [];
+
+            reservations.forEach(r => {
+                const p = Number(r.flight?.pilgrims || 0);
+                const f = Number(r.fare?.totalFare || 0);
+
+                pilgrims += p;
+                totalFare += f;
+
+                // agency wise pilgrims
+                agencyMap[r.agency?.name] =
+                    (agencyMap[r.agency?.name] || 0) + p;
+
+                fareVsPilgrim.push({
+                    agency: r.agency?.name,
+                    pilgrims: p,
+                    fare: f
+                });
+            });
+
+            const topAgencies = Object.entries(agencyMap)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 5);
+
+            const avgFarePerPilgrim =
+                pilgrims > 0 ? Math.round(totalFare / pilgrims) : 0;
+
+            res.send({
+                pilgrims,
+                totalFare,
+                totalReservations,
+                avgFarePerPilgrim,
+                topAgencies,
+                fareVsPilgrim
+            });
+        });
+
+
+
+
+
 
 
 
