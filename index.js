@@ -16,8 +16,8 @@ app.use(cors(
     {
         origin: [
             "http://localhost:5173",
-            "https://air-office-100.web.app",
-            "https://air-office-100.firebaseapp.com"
+            "https://air-office-28b26.web.app",
+            "https://air-office-28b26.firebaseapp.com"
         ],
         credentials: true,
     }
