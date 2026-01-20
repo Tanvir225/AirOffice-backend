@@ -422,7 +422,8 @@ async function run() {
                     agency: req.body.agency,
                     flight: req.body.flight,
                     fare: req.body.fare,
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    callerName: req.body.callerName
                 };
 
                 console.log(doc);
@@ -446,6 +447,7 @@ async function run() {
         app.patch("/api/hajj/reservations/:id", verifyToken, async (req, res) => {
             const { id } = req.params;
 
+
             await hajjReservation.updateOne(
                 { _id: new ObjectId(id) },
                 {
@@ -453,7 +455,8 @@ async function run() {
                         agency: req.body.agency,
                         flight: req.body.flight,
                         fare: req.body.fare,
-                        updatedAt: new Date()
+                        updatedAt: new Date(),
+                        callerName: req.body.callerName
                     }
                 }
             );
