@@ -488,17 +488,18 @@ async function run() {
 
         // payorder tracking api
         app.get("/api/hajj/search", verifyToken, async (req, res) => {
-            const { hl, trackingNo, payorderNo } = req.query;
+            const { flightNo, trackingNo, payorderNo } = req.query;
 
             const query = {
                 $or: [
-                    { "agency.hl": hl },
+                    { "flight.segments.flightNo": flightNo },
                     { "agency.trackingNo": trackingNo },
                     { "agency.payorderNo": payorderNo }
                 ]
             };
-
+            
             const result = await hajjReservation.find(query).toArray();
+            // console.log(result);
             res.send(result);
         });
 
