@@ -488,11 +488,12 @@ async function run() {
 
         // payorder tracking api
         app.get("/api/hajj/search", verifyToken, async (req, res) => {
-            const { flightNo, trackingNo, payorderNo } = req.query;
+            const { flightNo,hl, trackingNo, payorderNo } = req.query;
 
             const query = {
                 $or: [
                     { "flight.segments.flightNo": flightNo },
+                    { "agency.hl": hl },
                     { "agency.trackingNo": trackingNo },
                     { "agency.payorderNo": payorderNo }
                 ]
