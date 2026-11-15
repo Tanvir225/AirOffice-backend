@@ -1,3 +1,5 @@
+
+
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ObjectId, ServerApiVersion } = require("mongodb");
@@ -16,6 +18,7 @@ app.use(cors(
     {
         origin: [
             "http://localhost:5173",
+            "http://10.10.10.217:5173",
             "https://air-office-28b26.web.app",
             "https://air-office-28b26.firebaseapp.com"
         ],
@@ -79,6 +82,7 @@ async function run() {
         const topups = database.collection("topups");
         const users = database.collection("users");
         const hajjReservation = database.collection("hajj-reservation");
+        const leadAgentsCollection = database.collection("lead-agents");
 
 
         //jwt token api ------------------------------
@@ -422,8 +426,7 @@ async function run() {
                     agency: req.body.agency,
                     flight: req.body.flight,
                     fare: req.body.fare,
-                    createdAt: new Date(),
-                    callerName: req.body.callerName
+                    createdAt: new Date()
                 };
 
                 console.log(doc);
@@ -447,7 +450,6 @@ async function run() {
         app.patch("/api/hajj/reservations/:id", verifyToken, async (req, res) => {
             const { id } = req.params;
 
-
             await hajjReservation.updateOne(
                 { _id: new ObjectId(id) },
                 {
@@ -455,13 +457,10 @@ async function run() {
                         agency: req.body.agency,
                         flight: req.body.flight,
                         fare: req.body.fare,
-                        updatedAt: new Date(),
-                        callerName: req.body.callerName
+                        updatedAt: new Date()
                     }
                 }
             );
-
-            
 
             res.send({ success: true });
         });
@@ -488,19 +487,17 @@ async function run() {
 
         // payorder tracking api
         app.get("/api/hajj/search", verifyToken, async (req, res) => {
-            const { flightNo,hl, trackingNo, payorderNo } = req.query;
+            const { hl, trackingNo, payorderNo } = req.query;
 
             const query = {
                 $or: [
-                    { "flight.segments.flightNo": flightNo },
                     { "agency.hl": hl },
                     { "agency.trackingNo": trackingNo },
                     { "agency.payorderNo": payorderNo }
                 ]
             };
-            
+
             const result = await hajjReservation.find(query).toArray();
-            // console.log(result);
             res.send(result);
         });
 
@@ -524,8 +521,8 @@ async function run() {
                 totalFare += f;
 
                 // agency wise pilgrims
-                agencyMap[r.agency?.name] =
-                    (agencyMap[r.agency?.name] || 0) + p;
+                agencyMap[r.agency?.leadAgent] =
+                    (agencyMap[r.agency?.leadAgent] || 0) + p;
 
                 fareVsPilgrim.push({
                     agency: r.agency?.name,
@@ -554,9 +551,136 @@ async function run() {
 
 
 
+        // GET: Get all lead agents
+        app.get("/api/lead-agents",verifyToken, async (req, res) => {
+            try {
+                const leadAgents = await leadAgentsCollection
+                    .find({})
+                    .sort({ _id: -1 })
+                    .toArray();
 
+                res.status(200).json(leadAgents);
+            } catch (error) {
+                res.status(500).json({ message: "Failed to fetch lead agents" });
+            }
+        });
 
+        // POST: Add a new lead agent
+        app.post("/api/lead-agents", verifyToken, async (req, res) => {
+            try {
+                const { agencyName, email, hl } = req.body;
 
+                if (
+                    typeof agencyName !== "string" ||
+                    !agencyName.trim() ||
+                    typeof email !== "string" ||
+                    !email.trim() ||
+                    typeof hl !== "string" ||
+                    !hl.trim()
+                ) {
+                    return res.status(400).json({
+                        message: "Agency name, email and HL are required",
+                    });
+                }
+
+                const newLead = {
+                    agencyName: agencyName.trim(),
+                    email: email.trim(),
+                    hl: hl.trim(),
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                };
+
+                const result = await leadAgentsCollection.insertOne(newLead);
+
+                res.status(201).json({
+                    message: "Lead agent added successfully",
+                    lead: {
+                        ...newLead,
+                        _id: result.insertedId,
+                    },
+                });
+            } catch (error) {
+                res.status(500).json({ message: "Failed to add lead agent" });
+            }
+        });
+
+        // PUT: Update a lead agent
+        app.put("/api/lead-agents/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+                const { agencyName, email, hl } = req.body;
+
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).json({ message: "Invalid lead agent ID" });
+                }
+
+                if (
+                    typeof agencyName !== "string" ||
+                    !agencyName.trim() ||
+                    typeof email !== "string" ||
+                    !email.trim() ||
+                    typeof hl !== "string" ||
+                    !hl.trim()
+                ) {
+                    return res.status(400).json({
+                        message: "Agency name, email and HL are required",
+                    });
+                }
+
+                const result = await leadAgentsCollection.updateOne(
+                    { _id: new ObjectId(id) },
+                    {
+                        $set: {
+                            agencyName: agencyName.trim(),
+                            email: email.trim(),
+                            hl: hl.trim(),
+                            updatedAt: new Date(),
+                        },
+                    }
+                );
+
+                if (result.matchedCount === 0) {
+                    return res.status(404).json({ message: "Lead agent not found" });
+                }
+
+                const updatedLead = await leadAgentsCollection.findOne({
+                    _id: new ObjectId(id),
+                });
+
+                res.status(200).json({
+                    message: "Lead agent updated successfully",
+                    lead: updatedLead,
+                });
+            } catch (error) {
+                res.status(500).json({ message: "Failed to update lead agent" });
+            }
+        });
+
+        // DELETE: Delete a lead agent
+        app.delete("/api/lead-agents/:id", verifyToken, async (req, res) => {
+            try {
+                const { id } = req.params;
+
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).json({ message: "Invalid lead agent ID" });
+                }
+
+                const result = await leadAgentsCollection.deleteOne({
+                    _id: new ObjectId(id),
+                });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).json({ message: "Lead agent not found" });
+                }
+
+                res.status(200).json({
+                    message: "Lead agent deleted successfully",
+                });
+            } catch (error) {
+                res.status(500).json({ message: "Failed to delete lead agent" });
+            }
+        });
 
 
 
